@@ -1,51 +1,33 @@
 pipeline {
     agent any
 
-    options {
-        skipStagesAfterUnstable()
-    }
-
-    tools {
-        maven '3.9.11'
+    environment {
+        NEXUS_URL = "http://localhost:8081/repository/spring-boot-releases/"
     }
 
     stages {
-        stage('Checkout Source Code') {
+        stage('Build') {
             steps {
-                git branch: 'main', url: 'https://github.com/logan-177/gs-spring-boot.git'
+                sh './mvnw clean package -DskipTests'
             }
         }
 
-        stage('Test') {
+        stage('Upload to Nexus') {
             steps {
-                sh 'git --version'
-                sh 'mvn --version'
-                sh 'mvn clean test'
+                withCredentials([usernamePassword(
+                    credentialsId: 'nexus-creds',
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASS'
+                )]) {
+                    sh """
+                        echo Uploading JAR to Nexus...
+                        curl -v -u $NEXUS_USER:$NEXUS_PASS \
+                        --upload-file target/*.jar \
+                        ${NEXUS_URL}com/example/demo/demo-1.0.0.jar
+                    """
+                }
             }
-        }
-
-        stage('Build and Package') {
-            steps {
-                sh 'mvn clean package -DskipTests'
-            }
-        }
-
-        stage('Archive Artifacts') {
-            steps {
-                archiveArtifacts artifacts: 'target/*.jar', fingerprint: true
-            }
-        }
-    }
-
-    post {
-        always {
-            echo 'Pipeline finished.'
-        }
-        success {
-            echo 'Build successful!'
-        }
-        failure {
-            echo 'Build failed!'
         }
     }
 }
+
